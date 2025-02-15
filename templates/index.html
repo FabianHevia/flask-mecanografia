@@ -111,6 +111,99 @@
             top: 20px;
             right: 20px;
         }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: #2a2a2a;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 500px;
+            color: var(--text-color);
+            position: relative;
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                transform: translateY(-100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-title {
+            text-align: center;
+            color: var(--accent-color);
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .result-item {
+            background-color: #333;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .result-label {
+            font-size: 0.9em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .result-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: var(--accent-color);
+            animation: confetti 1s ease-in-out forwards;
+            z-index: 1001;
+        }
+
+        @keyframes confetti {
+            0% {
+                transform: translateY(0) rotateZ(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh) rotateZ(720deg);
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 <body>
@@ -154,6 +247,35 @@
             <button onclick="resetGame()">Reiniciar</button>
             <button onclick="togglePause()" id="pause-btn">Pausar</button>
             <button onclick="newQuote()">Nueva Frase</button>
+        </div>
+    </div>
+
+    <!-- Modal de resultados -->
+    <div id="results-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title">¡Prueba Completada!</div>
+            <div class="result-grid">
+                <div class="result-item">
+                    <div class="result-label">Tiempo</div>
+                    <div class="result-value" id="modal-time">0:00</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Velocidad</div>
+                    <div class="result-value" id="modal-speed">0 PPM</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Precisión</div>
+                    <div class="result-value" id="modal-accuracy">100%</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Caracteres</div>
+                    <div class="result-value" id="modal-chars">0</div>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button onclick="resetGame()">Nueva Prueba</button>
+                <button onclick="closeModal()">Cerrar</button>
+            </div>
         </div>
     </div>
 
@@ -281,6 +403,88 @@
         }
 
         async function resetGame() {
+            startTime = null;
+            clearInterval(timerInterval);
+            if (survivalTimer) clearTimeout(survivalTimer);
+            isPaused = false;
+            score = 0;
+            
+            document.getElementById('typing-area').value = '';
+            document.getElementById('speed').textContent = '0 PPM';
+            document.getElementById('accuracy').textContent = '0.0%';
+            document.getElementById('time').textContent = '0:00';
+            document.getElementById('pause-btn').textContent = 'Pausar';
+            
+            await newQuote();
+        }
+
+        function finishGame() {
+            clearInterval(timerInterval);
+            if (survivalTimer) clearInterval(survivalTimer);
+            
+            const endTime = new Date();
+            const timeElapsed = new Date(endTime - startTime);
+            const minutes = timeElapsed.getMinutes();
+            const seconds = timeElapsed.getSeconds();
+            const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            const typedText = document.getElementById('typing-area').value;
+            const totalChars = currentQuote.length;
+            const timeInMinutes = timeElapsed.getTime() / 60000;
+            const wpm = Math.round((totalChars / 5) / timeInMinutes);
+            
+            // Actualizar modal con resultados
+            document.getElementById('modal-time').textContent = timeString;
+            document.getElementById('modal-speed').textContent = `${wpm} PPM`;
+            document.getElementById('modal-accuracy').textContent = document.getElementById('accuracy').textContent;
+            document.getElementById('modal-chars').textContent = totalChars;
+            
+            // Mostrar modal
+            showModal();
+            
+            // Crear efecto de confetti
+            createConfetti();
+        }
+
+        function showModal() {
+            document.getElementById('results-modal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('results-modal').style.display = 'none';
+        }
+
+        function createConfetti() {
+            for (let i = 0; i < 50; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * window.innerWidth + 'px';
+                confetti.style.backgroundColor = getRandomColor();
+                confetti.style.animationDuration = (Math.random() * 3 + 1) + 's';
+                document.body.appendChild(confetti);
+                
+                // Limpiar el confetti después de la animación
+                setTimeout(() => {
+                    confetti.remove();
+                }, 3000);
+            }
+        }
+
+        function getRandomColor() {
+            const colors = ['#4CAF50', '#2196F3', '#FFC107', '#E91E63', '#9C27B0'];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        // Cerrar modal con la tecla Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        // Modificar resetGame para cerrar el modal
+        async function resetGame() {
+            closeModal();
             startTime = null;
             clearInterval(timerInterval);
             if (survivalTimer) clearTimeout(survivalTimer);
