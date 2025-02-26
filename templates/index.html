@@ -304,7 +304,7 @@
                 const quote = await response.json();
                 
                 // Actualizar el texto y autor en la interfaz
-                document.getElementById('quote-text').textContent = quote.text;
+                renderQuoteText(quote.text); // Usamos nuestra nueva función de renderizado
                 document.getElementById('quote-author').textContent = `- ${quote.author}`;
                 
                 // Guardar la cita actual
@@ -366,6 +366,18 @@
             } catch (error) {
                 console.error('Error en la verificación:', error);
             }
+        }
+
+        function renderQuoteText(text) {
+            const quoteTextElement = document.getElementById('quote-text');
+            
+            // Convertimos el texto en spans individuales para cada carácter
+            const charSpans = text.split('').map(char => {
+                // Usamos data-char para guardar el carácter original
+                return `<span class="quote-char" data-char="${char}">${char}</span>`;
+            }).join('');
+            
+            quoteTextElement.innerHTML = charSpans;
         }
 
         function startTimer() {
@@ -475,12 +487,138 @@
             return colors[Math.floor(Math.random() * colors.length)];
         }
 
+        function highlightDifferences(typedText, originalText) {
+            // Obtener elemento donde mostraremos las diferencias
+            const quoteAuthorElement = document.getElementById('quote-author');
+            
+            // Si no hay texto escrito, mostramos solo el autor
+            if (!typedText || typedText.trim() === '') {
+                // Extraemos el autor del elemento quote-author (asumiendo que está en formato "- Autor")
+                const authorText = quoteAuthorElement.textContent;
+                return;
+            }
+            
+            // Convertir textos a arrays de caracteres para comparación
+            const originalChars = originalText.split('');
+            const typedChars = typedText.split('');
+            
+            // Crear un HTML con las diferencias marcadas
+            let resultHTML = '<span style="font-weight: bold;">Diferencias: </span>';
+            
+            // Variables para estadísticas
+            let correctCount = 0;
+            let incorrectCount = 0;
+            let missingCount = 0;
+            let extraCount = 0;
+            
+            // Comparar cada carácter
+            const maxLength = Math.max(originalChars.length, typedChars.length);
+            
+            for (let i = 0; i < maxLength; i++) {
+                if (i < typedChars.length && i < originalChars.length) {
+                    // Ambos textos tienen caracteres en esta posición
+                    if (typedChars[i] === originalChars[i]) {
+                        // Carácter correcto - verde
+                        correctCount++;
+                    } else {
+                        // Carácter incorrecto - rojo
+                        incorrectCount++;
+                    }
+                } else if (i >= typedChars.length && i < originalChars.length) {
+                    // Caracteres faltantes - amarillo
+                    missingCount++;
+                } else if (i < typedChars.length && i >= originalChars.length) {
+                    // Caracteres extra - naranja
+                    extraCount++;
+                }
+            }
+            
+            // Construir resumen con colores
+            resultHTML += `<span style="color: green;">${correctCount} correctos</span>, `;
+            resultHTML += `<span style="color: red;">${incorrectCount} incorrectos</span>, `;
+            resultHTML += `<span style="color: orange;">${missingCount} faltantes</span>, `;
+            resultHTML += `<span style="color: purple;">${extraCount} extra</span>`;
+            
+            // Calcular precisión
+            const totalTyped = correctCount + incorrectCount + extraCount;
+            const accuracy = totalTyped > 0 ? (correctCount / totalTyped) * 100 : 0;
+            resultHTML += ` - Precisión: <span style="font-weight: bold;">${accuracy.toFixed(1)}%</span>`;
+            
+            // Actualizar el elemento
+            quoteAuthorElement.innerHTML = resultHTML;
+        }
+
         // Cerrar modal con la tecla Escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeModal();
             }
         });
+
+        // Función para conectar la comparación al área de texto
+        function setupTextComparison() {
+            const typingArea = document.getElementById('typing-area');
+            const quoteTextElement = document.getElementById('quote-text');
+            
+            typingArea.addEventListener('input', function() {
+                const typedText = typingArea.value;
+                const charElements = quoteTextElement.querySelectorAll('.quote-char');
+                
+                // Reseteamos todos los caracteres a su estado normal
+                charElements.forEach(span => {
+                    span.style.backgroundColor = '';
+                    span.style.color = '';
+                });
+                
+                // Comparamos cada carácter escrito con el original
+                for (let i = 0; i < typedText.length; i++) {
+                    if (i < charElements.length) {
+                        const originalChar = charElements[i].getAttribute('data-char');
+                        
+                        if (typedText[i] !== originalChar) {
+                            // Carácter incorrecto - fondo rojo, texto blanco
+                            charElements[i].style.backgroundColor = 'red';
+                            charElements[i].style.color = 'white';
+                        } else {
+                            // Carácter correcto - fondo verde claro
+                            charElements[i].style.backgroundColor = 'lightgreen';
+                        }
+                    }
+                }
+                
+                // Calculamos estadísticas para mostrar
+                updateTypingStatistics(typedText, charElements);
+            });
+        }
+
+
+        function updateTypingStatistics(typedText, charElements) {
+            let correctCount = 0;
+            let incorrectCount = 0;
+            
+            // Contamos aciertos y errores
+            for (let i = 0; i < typedText.length && i < charElements.length; i++) {
+                const originalChar = charElements[i].getAttribute('data-char');
+                if (typedText[i] === originalChar) {
+                    correctCount++;
+                } else {
+                    incorrectCount++;
+                }
+            }
+            
+            // Calculamos precisión
+            const totalTyped = correctCount + incorrectCount;
+            const accuracy = totalTyped > 0 ? (correctCount / totalTyped) * 100 : 0;
+            
+            // Actualizamos la interfaz
+            document.getElementById('accuracy').textContent = `${accuracy.toFixed(1)}%`;
+            
+            // Calculamos velocidad (PPM - Palabras Por Minuto)
+            // Implementación básica - se podría mejorar con tiempo real
+            const wordsTyped = typedText.trim().split(/\s+/).length;
+            // Asumimos un tiempo fijo para este ejemplo - idealmente usarías timestamps reales
+            document.getElementById('speed').textContent = `${wordsTyped} PPM`;
+        }
 
         // Modificar resetGame para cerrar el modal
         async function resetGame() {
@@ -499,6 +637,23 @@
             
             await newQuote();
         }
+
+        // Inicializar la comparación cuando se cargue la página
+        document.addEventListener('DOMContentLoaded', function() {
+        // Añadir estilos CSS para la visualización
+        const styleElement = document.createElement('style');
+        styleElement.textContent = `
+            .quote-char {
+                transition: background-color 0.2s, color 0.2s;
+                border-radius: 2px;
+                padding: 0 1px;
+            }
+        `;
+        document.head.appendChild(styleElement);
+        
+        setupTextComparison();
+        newQuote(); // Cargar una cita inicial
+    });
     </script>
 </body>
 </html>
