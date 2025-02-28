@@ -289,6 +289,15 @@
         let currentQuote = '';
         let score = 0;
 
+        // Variables globales para el modo supervivencia
+        let timeLimit = 60; // Tiempo en segundos (predeterminado: 1 minuto)
+        let timeIncrement = 10; // Incremento en segundos por cita completada
+        let timer = null; // Variable para el temporizador
+        let currentTime = 0; // Tiempo actual en segundos
+        let completedQuotes = 0; // Contador de citas completadas
+        let totalKeystrokes = 0; // Total de pulsaciones
+        let correctKeystrokes = 0; // Pulsaciones correctas
+
         // Inicialización
         window.onload = async () => {
             await newQuote();
@@ -354,12 +363,32 @@
                 // Actualizar estadísticas
                 document.getElementById('accuracy').textContent = `${result.accuracy.toFixed(1)}%`;
                 
-                // Verificar si se completó la frase
+                // Actualizar precisión para cálculos de supervivencia
+                currentAccuracy = result.accuracy;
+                
+                /// Verificar si se completó la frase
                 if (result.isCorrect) {
                     if (currentMode === 'survival') {
+                        // Incrementar puntaje
                         score += 1;
+                        completedQuotes += 1;
+                        
+                        // Actualizar estadísticas para el modo supervivencia
+                        updateSurvivalStatistics(typedText);
+                        
+                        // Añadir tiempo al temporizador de supervivencia
+                        if (timer) {
+                            currentTime += timeIncrement;
+                            updateTimerDisplay();
+                        }
+                        
+                        // Cargar nueva cita
                         await newQuote();
+                        
+                        // Limpiar área de escritura (necesario si newQuote no lo hace)
+                        e.target.value = '';
                     } else {
+                        // En modo práctica, finalizar el juego
                         finishGame();
                     }
                 }
@@ -411,25 +440,37 @@
 
         function setMode(mode) {
             currentMode = mode;
-            resetGame();
+            
+            if (mode === 'survival') {
+                // Mostrar modal de configuración de supervivencia
+                showSurvivalConfigModal();
+            } else {
+                // Restaurar modo práctica
+                resetGame();
+                document.getElementById('timer-display').style.display = 'none';
+            }
+        }
+        // Función para actualizar estadísticas en modo supervivencia
+        function updateSurvivalStatistics(typedText) {
+            // Actualizar contador de pulsaciones totales
+            totalKeystrokes += typedText.length;
+            
+            // Calcular pulsaciones correctas basado en la precisión actual
+            correctKeystrokes += Math.round((currentAccuracy / 100) * typedText.length);
+            
+            // Actualizar estadísticas en la interfaz (si hay elementos para mostrarlas)
+            const speedElement = document.getElementById('speed');
+            if (speedElement) {
+                // Calcular velocidad: caracteres por minuto o palabras por minuto
+                // Este cálculo puede ajustarse según tus necesidades
+                const elapsedMinutes = (new Date() - startTime) / 60000;
+                const wpm = Math.round((totalKeystrokes / 5) / elapsedMinutes); // 5 caracteres = 1 palabra aprox.
+                
+                speedElement.textContent = `${wpm} PPM`;
+            }
         }
 
-        async function resetGame() {
-            startTime = null;
-            clearInterval(timerInterval);
-            if (survivalTimer) clearTimeout(survivalTimer);
-            isPaused = false;
-            score = 0;
-            
-            document.getElementById('typing-area').value = '';
-            document.getElementById('speed').textContent = '0 PPM';
-            document.getElementById('accuracy').textContent = '0.0%';
-            document.getElementById('time').textContent = '0:00';
-            document.getElementById('pause-btn').textContent = 'Pausar';
-            
-            await newQuote();
-        }
-
+        // Función para finalizar el juego practica
         function finishGame() {
             clearInterval(timerInterval);
             if (survivalTimer) clearInterval(survivalTimer);
@@ -458,12 +499,89 @@
             createConfetti();
         }
 
+        // Función para finalizar el juego supervivencia
+        function endGame() {
+            // Detener el temporizador
+            clearInterval(timer);
+            
+            // Mostrar modal con estadísticas
+            showGameOverModal();
+        }
+
         function showModal() {
             document.getElementById('results-modal').style.display = 'block';
         }
 
+        // Función para mostrar el modal de fin de juego
+        function showGameOverModal() {
+            // Crear el modal si no existe
+            if (!document.getElementById('game-over-modal')) {
+                const modalHTML = `
+                    <div id="game-over-modal" class="modal">
+                        <div class="modal-content">
+                            <span class="close-modal" onclick="closeModal('game-over-modal')">&times;</span>
+                            <h2>¡Tiempo Agotado!</h2>
+                            
+                            <div class="score-section">
+                                <h1 class="final-score">${completedQuotes} citas completadas</h1>
+                            </div>
+                            
+                            <div class="stats-section">
+                                <div class="stat-item">
+                                    <span class="stat-label">Precisión:</span>
+                                    <span id="final-accuracy" class="stat-value">0%</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Pulsaciones:</span>
+                                    <span id="final-keystrokes" class="stat-value">0</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Modo:</span>
+                                    <span id="game-mode-info" class="stat-value">
+                                        ${timeLimit === 60 ? '1 minuto' : timeLimit + ' segundos'} / 
+                                        +${timeIncrement} segundos
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <button onclick="restartGame()" class="start-button">Jugar de Nuevo</button>
+                        </div>
+                    </div>
+                `;
+                
+                // Insertar el modal en el DOM
+                const modalContainer = document.createElement('div');
+                modalContainer.innerHTML = modalHTML;
+                const modalElement = modalContainer.firstElementChild; // Usa firstElementChild en lugar de firstChild
+                document.body.appendChild(modalElement);
+
+
+                console.log('Modal insertado:', modalElement);
+            } else {
+                // Actualizar estadísticas en el modal existente
+                document.querySelector('.final-score').textContent = `${completedQuotes} citas completadas`;
+                document.getElementById('game-mode-info').textContent = 
+                    `${timeLimit === 60 ? '1 minuto' : timeLimit + ' segundos'} / +${timeIncrement} segundos`;
+            }
+            
+            // Calcular precisión final
+            const accuracy = totalKeystrokes > 0 ? (correctKeystrokes / totalKeystrokes * 100).toFixed(1) : '0.0';
+            document.getElementById('final-accuracy').textContent = `${accuracy}%`;
+            document.getElementById('final-keystrokes').textContent = totalKeystrokes;
+            
+            // Mostrar el modal
+            document.getElementById('game-over-modal').style.display = 'flex';
+        }
+
         function closeModal() {
             document.getElementById('results-modal').style.display = 'none';
+        }
+
+        function closeModalSurvival(modalId) {
+            const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.style.display = 'none';
+                }
         }
 
         function createConfetti() {
@@ -638,22 +756,370 @@
             await newQuote();
         }
 
+        // Función para establecer el límite de tiempo
+        function setTimeLimit(seconds) {
+            timeLimit = seconds;
+            // Actualizar UI para mostrar la opción seleccionada
+            updateOptionButtons('setTimeLimit', seconds);
+        }
+
+        // Función para establecer el incremento de tiempo
+        function setTimeIncrement(seconds) {
+            timeIncrement = seconds;
+            // Actualizar UI para mostrar la opción seleccionada
+            updateOptionButtons('setTimeIncrement', seconds);
+        }
+
+        // Función para actualizar los botones de opción (resaltar el seleccionado)
+        function updateOptionButtons(functionName, value) {
+            let buttons;
+            
+            if (functionName === 'setTimeLimit') {
+                buttons = document.querySelectorAll('.config-section:nth-child(1) .option-button');
+            } else if (functionName === 'setTimeIncrement') {
+                buttons = document.querySelectorAll('.config-section:nth-child(2) .option-button');
+            }
+            
+            buttons.forEach(button => {
+                button.classList.remove('selected');
+                
+                // Comparar el valor del botón con el valor seleccionado
+                const buttonValueMatch = 
+                    (functionName === 'setTimeLimit' && button.textContent.includes(value === 60 ? '1 minuto' : value + ' segundo')) ||
+                    (functionName === 'setTimeIncrement' && button.textContent.includes('+' + value + ' segundo'));
+                    
+                if (buttonValueMatch) {
+                    button.classList.add('selected');
+                }
+            });
+        }
+
+        // Función para mostrar el modal de configuración del modo supervivencia
+        function showSurvivalConfigModal() {
+            // Crear el modal si no existe
+            if (!document.getElementById('survival-config-modal')) {
+                const modalHTML = `
+                    <div id="survival-config-modal" class="modal">
+                        <div class="modal-content">
+                            <span class="close-modal" onclick="closeModalSurvival('survival-config-modal')">&times;</span>
+                            <h2>Configuración del Modo Supervivencia</h2>
+                            
+                            <div class="config-section">
+                                <h3>Tiempo Inicial</h3>
+                                <div class="option-buttons">
+                                    <button onclick="setTimeLimit(60)" class="option-button selected">1 minuto</button>
+                                    <button onclick="setTimeLimit(30)" class="option-button">30 segundos</button>
+                                    <button onclick="setTimeLimit(10)" class="option-button">10 segundos</button>
+                                </div>
+                            </div>
+                            
+                            <div class="config-section">
+                                <h3>Incremento por Cita Completada</h3>
+                                <div class="option-buttons">
+                                    <button onclick="setTimeIncrement(20)" class="option-button selected">+20 segundos</button>
+                                    <button onclick="setTimeIncrement(10)" class="option-button">+10 segundos</button>
+                                    <button onclick="setTimeIncrement(5)" class="option-button">+5 segundos</button>
+                                </div>
+                            </div>
+                            
+                            <button onclick="startSurvivalMode()" class="start-button">¡Comenzar!</button>
+                        </div>
+                    </div>
+                `;
+                
+                // Insertar el modal en el DOM
+                const modalContainer = document.createElement('div');
+                modalContainer.innerHTML = modalHTML;
+                const modalElement = modalContainer.firstElementChild; // Usa firstElementChild en lugar de firstChild
+                document.body.appendChild(modalElement);
+
+                console.log('Modal insertado:', modalElement);
+                
+                // Añadir estilos CSS para el modal
+                // addModalStyles();
+            }
+            
+            // Esperar un breve momento antes de acceder al modal
+            setTimeout(() => {
+                const modal = document.getElementById('survival-config-modal');
+                if (modal) {
+                    modal.style.display = 'flex';
+                } else {
+                    console.error('El modal no fue encontrado.');
+                }
+            }, 10); // 10 ms de retraso
+        }
+
+        // Función para agregar estilos CSS
+        function addModalStyles() {
+            if (!document.getElementById('survival-mode-styles')) {
+                const styleElement = document.createElement('style');
+                styleElement.id = 'survival-mode-styles';
+                styleElement.textContent = `
+                    .modal {
+                        display: none;
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background-color: rgba(0, 0, 0, 0.7);
+                        z-index: 1000;
+                        justify-content: center;
+                        align-items: center;
+                    }
+                    
+                    .modal-content {
+                        background-color: white;
+                        padding: 30px;
+                        border-radius: 8px;
+                        max-width: 500px;
+                        width: 90%;
+                        position: relative;
+                        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+                    }
+                    
+                    .close-modal {
+                        position: absolute;
+                        top: 10px;
+                        right: 20px;
+                        font-size: 30px;
+                        font-weight: bold;
+                        cursor: pointer;
+                        color: #666;
+                    }
+                    
+                    .close-modal:hover {
+                        color: #000;
+                    }
+                    
+                    .config-section {
+                        margin-bottom: 20px;
+                    }
+                    
+                    .config-section h3 {
+                        margin-bottom: 10px;
+                        color: #333;
+                    }
+                    
+                    .option-buttons {
+                        display: flex;
+                        gap: 10px;
+                        flex-wrap: wrap;
+                    }
+                    
+                    .option-button {
+                        padding: 8px 16px;
+                        background-color: #f0f0f0;
+                        border: 2px solid #ddd;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        transition: all 0.2s;
+                    }
+                    
+                    .option-button:hover {
+                        background-color: #e0e0e0;
+                    }
+                    
+                    .option-button.selected {
+                        background-color: #4CAF50;
+                        color: white;
+                        border-color: #388E3C;
+                    }
+                    
+                    .start-button {
+                        background-color: #2196F3;
+                        color: white;
+                        border: none;
+                        padding: 12px 24px;
+                        font-size: 16px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        margin-top: 10px;
+                        transition: background-color 0.3s;
+                        width: 100%;
+                    }
+                    
+                    .start-button:hover {
+                        background-color: #0b7dda;
+                    }
+                    
+                    .timer {
+                        font-size: 24px;
+                        font-weight: bold;
+                        text-align: center;
+                        margin-bottom: 15px;
+                        color: #333;
+                    }
+                    
+                    .timer-low {
+                        color: #f44336;
+                        animation: pulse 1s infinite;
+                    }
+                    
+                    @keyframes pulse {
+                        0% { opacity: 1; }
+                        50% { opacity: 0.7; }
+                        100% { opacity: 1; }
+                    }
+                    
+                    .score-section {
+                        text-align: center;
+                        margin: 20px 0;
+                    }
+                    
+                    .final-score {
+                        font-size: 36px;
+                        color: #2196F3;
+                        margin-bottom: 20px;
+                    }
+                    
+                    .stats-section {
+                        background-color: #f5f5f5;
+                        padding: 15px;
+                        border-radius: 4px;
+                        margin-bottom: 20px;
+                    }
+                    
+                    .stat-item {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-bottom: 10px;
+                        font-size: 16px;
+                    }
+                    
+                    .stat-label {
+                        font-weight: bold;
+                        color: #555;
+                    }
+                    
+                    .stat-value {
+                        color: #333;
+                    }
+                `;
+                document.head.appendChild(styleElement);
+            }
+        }
+
+
+        // Función para iniciar el modo supervivencia
+        function startSurvivalMode() {
+            // Cerrar el modal de configuración
+            closeModalSurvival('survival-config-modal');
+            
+            // Reiniciar estadísticas
+            resetGameSurvival();
+            
+            // Mostrar el temporizador
+            const timerDisplay = document.getElementById('timer-display');
+            if (!timerDisplay) {
+                // Crear el elemento del temporizador si no existe
+                const timerElement = document.createElement('div');
+                timerElement.id = 'timer-display';
+                timerElement.className = 'timer';
+                document.querySelector('.container').insertBefore(timerElement, document.querySelector('.quote-container'));
+            }
+            
+            // Inicializar el tiempo
+            currentTime = timeLimit;
+            updateTimerDisplay();
+            document.getElementById('timer-display').style.display = 'block';
+            
+            // Iniciar el contador
+            startTimer();
+            
+            // Cargar una nueva cita
+            newQuote();
+            
+            // Enfocar el área de escritura
+            document.getElementById('typing-area').focus();
+        }
+
+        // Función para iniciar el temporizador
+        function startTimer() {
+            // Limpiar cualquier temporizador existente
+            if (timer) {
+                clearInterval(timer);
+            }
+            
+            // Iniciar nuevo temporizador
+            timer = setInterval(() => {
+                currentTime--;
+                updateTimerDisplay();
+                
+                // Verificar si el tiempo se acabó
+                if (currentTime <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        // Función para actualizar la visualización del temporizador
+        function updateTimerDisplay() {
+            const minutes = Math.floor(currentTime / 60);
+            const seconds = currentTime % 60;
+            const formattedTime = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            
+            const timerDisplay = document.getElementById('timer-display');
+            timerDisplay.textContent = formattedTime;
+            
+            // Cambiar color cuando queda poco tiempo
+            if (currentTime <= 10) {
+                timerDisplay.classList.add('timer-low');
+            } else {
+                timerDisplay.classList.remove('timer-low');
+            }
+        }
+
+        // Función para reiniciar el juego modo supervivencia
+        function restartGame() {
+            closeModalSurvival('game-over-modal');
+            startSurvivalMode();
+        }
+
+        // Función para reiniciar variables del juego
+        function resetGameSurvival() {
+            // Detener temporizador si está activo
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+            
+            // Reiniciar estadísticas
+            completedQuotes = 0;
+            totalKeystrokes = 0;
+            correctKeystrokes = 0;
+            
+            // Limpiar área de escritura
+            const typingArea = document.getElementById('typing-area');
+            if (typingArea) {
+                typingArea.value = '';
+            }
+        }
+
         // Inicializar la comparación cuando se cargue la página
         document.addEventListener('DOMContentLoaded', function() {
-        // Añadir estilos CSS para la visualización
-        const styleElement = document.createElement('style');
-        styleElement.textContent = `
-            .quote-char {
-                transition: background-color 0.2s, color 0.2s;
-                border-radius: 2px;
-                padding: 0 1px;
+            // Añadir estilos CSS para la visualización
+            const styleElement = document.createElement('style');
+            styleElement.textContent = `
+                .quote-char {
+                    transition: background-color 0.2s, color 0.2s;
+                    border-radius: 2px;
+                    padding: 0 1px;
+                }
+            `;
+            document.head.appendChild(styleElement);
+
+            const typingArea = document.getElementById('typing-area');
+            if (typingArea) {
+                // Reemplazar cualquier listener existente con el nuevo
+                typingArea.addEventListener('input', checkTyping);
             }
-        `;
-        document.head.appendChild(styleElement);
-        
-        setupTextComparison();
-        newQuote(); // Cargar una cita inicial
-    });
+                       
+            setupTextComparison();
+            newQuote(); // Cargar una cita inicial
+        });
     </script>
 </body>
 </html>
